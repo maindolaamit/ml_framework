@@ -301,6 +301,17 @@ def value_count_bar(data, title=None, normalize=True, figsize=(12, 7),
     plt.show()
 
 
+def plot_images(images_path_list, row=1, col=1, figsize=(8, 8)):
+    num_plots = row * col
+    assert images_path_list is not None and len(images_path_list) > num_plots, 'Number of subplots lesser than the list'
+    fig, axs = plt.subplots(row, col, figsize=figsize)
+    for i in range(row):
+        for j in range(col):
+            image_path = images_path_list[i+j]
+            axs[i, j].imshow(plt.imread(image_path))
+    plt.show()
+
+
 def plot_confusion_matrix(cnf_matrix_data, target_names,
                           title='Confusion matrix'):
     """
@@ -325,22 +336,15 @@ def plot_confusion_matrix(cnf_matrix_data, target_names,
     plt.xlabel('Predicted', color='crimson', fontsize=20)
 
 
-def plot_loss_acc(history, train_score, test_score, batch_size=None):
+def plot_loss_acc(history, title_remarks=None, figsize=(8,6)):
     """
     Method to plot the Loss and Accuracy with the given History dataframe as input
     """
     history_df = pd.DataFrame(history.history)
-    # train_loss, train_accuracy = train_score[0], train_score[1]
-    # test_loss, test_accuracy = test_score[0], test_score[1]
-    print("----------------------------------------------------------")
-    print("\t          | Train | Test")
-    print("----------------------------------------------------------")
-    print(f"\tLoss      | {train_score[0]:.3f} | {test_score[0]:.3f}")
-    print(f"\tAccurracy | {train_score[1]:.3f} | {test_score[1]:.3f}")
-    print("----------------------------------------------------------")
     # plot loss during training
-    fig, ax = plt.subplots(ncols=2)
-    fig.suptitle(f'Loss and Accurracy Graph\nBatch size {batch_size}', size=15)
+    fig, ax = plt.subplots(ncols=2, figsize=figsize)
+    title = f'Loss and Accurracy Graph\n{"" if title_remarks is None else title_remarks}'
+    fig.suptitle(title, size=15)
 
     ax[0].set_title('Loss')
     ax[0].plot(history_df['loss'], label='train')

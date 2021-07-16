@@ -34,8 +34,6 @@ def unzip_file(zipfile_path, dest_dir=None):
 
     cwd = os.getcwd()
 
-    # zipfile_name = (os.path.basename(zipfile_path))
-    # zipfile_basename = zipfile_name.replace('.zip', '')
     zipfile_path = Path(zipfile_path).resolve()
     zipfile_dir = zipfile_path.parent
 
@@ -46,26 +44,20 @@ def unzip_file(zipfile_path, dest_dir=None):
         dest_dir = zipfile_dir
     else:
         dest_dir = Path(dest_dir).resolve()
+        # Create the destination dir, if not exists
+        if not os.path.isdir(dest_dir):
+            os.mkdir(dest_dir)
 
-    # Create the destination dir, if not exists
-    if not os.path.isdir(dest_dir):
-        os.mkdir(dest_dir)
-
-    # print(f'Changing directory to {dest_dir}, zip file {zipfile_path}')
-    os.chdir(dest_dir)
     try:
         # Unzip the file
         zip_ref = zipfile.ZipFile(zipfile_path, 'r')
         zip_content_files = [os.path.join(zipfile_dir, v.filename) for v in zip_ref.filelist]
         # Extract all files
-        zip_ref.extractall()
+        zip_ref.extractall(dest_dir)
         zip_ref.close()
-        print(f'Files extracted to directory : {dest_dir}')
+        print(f'{zipfile_path} extracted to directory : {dest_dir}')
     except Exception as e:
         print(e)
-
-    # Switch to current directory
-    os.chdir(cwd)
 
 
 def load_from_json(json_file_path):

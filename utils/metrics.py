@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn import metrics as skmetrics
-from mllib import charts
+from utils import charts
 
 
 class ClassificationMetrics:

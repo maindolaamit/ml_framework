@@ -16,7 +16,7 @@ __requires_python__ = '>=3.6.0'
 __version__ = '0.1.0'
 __license__ = 'MIT'
 
-here = Path('__file__').resolve().parent.parent
+here = Path('__file__').resolve().parent
 
 
 def get_long_description():
@@ -32,7 +32,7 @@ def get_long_description():
 
 
 def find_requirements():
-    with open('requirements.txt', 'r') as f:
+    with open(os.path.join(here, 'requirements.txt'), 'r') as f:
         return f.read().splitlines()
 
 
@@ -52,6 +52,5 @@ setup(
         "Operating System :: OS Independent",
     ],
     url='https://github.com/maindolaamit/mllib',
-    #     install_requires=["numpy", "pandas", "matplotlib", "seaborn", "sklearn", "emoji", "nltk", "lightgbm", "xgboost"]
     install_requires=find_requirements(),
 )
