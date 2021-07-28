@@ -303,7 +303,7 @@ def value_count_bar(data, title=None, normalize=True, figsize=(12, 7),
 
 def plot_images(images_path_list, row=1, col=1, figsize=(8, 8)):
     num_plots = row * col
-    assert images_path_list is not None and len(images_path_list) > num_plots, 'Number of subplots lesser than the list'
+    assert images_path_list is not None and len(images_path_list) >= num_plots, 'Number of items in the list are lesser than subplots count.'
     fig, axs = plt.subplots(row, col, figsize=figsize)
     for i in range(row):
         for j in range(col):

@@ -2,11 +2,16 @@ import importlib
 import os
 
 from pathlib import Path
+
+import pandas as pd
+from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, array_to_img
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.python.keras.layers import Conv2D, MaxPool2D, Flatten
 from tensorflow.python.keras.models import Sequential
+from sklearn.model_selection import KFold
+from livelossplot.inputs.keras import PlotLossesCallback
 
 MODELS_FILE_DIR = Path(__file__).resolve().parent
 MODELS_JSON_FILE_PATH = os.path.join(MODELS_FILE_DIR, 'models.json')
@@ -46,17 +51,20 @@ def get_vgg_block(num_blocks=1, input_shape=(150, 150, 3),
 
 class CNNModel:
     def __init__(self, base_model, weights='imagenet', input_shape=(224, 224, 3),
-                 optimizer=Adam(), loss='categorical_crossentropy', train_n_layers=None):
+                 optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy']):
         """
         Constructor method
         :param base_model_name: Base model name
         :param weights: Weights of the model, initialized to imagenet
         """
+        self.metrics = metrics
         self.base_model = base_model
         self.weights = weights
         self.input_shape = input_shape
         self.model = None
         self.loss = loss
+        self.optimizer = optimizer
+        self.preprocessing_function = None
 
     def _get_base_module(self, model_name):
         """
@@ -81,19 +89,77 @@ class CNNModel:
         """
         # Load pre trained model
         base_cnn = getattr(self.base_module, self.base_model_name)
+        self.preprocessing_function = getattr(self.base_module, 'preprocess_input')
         self.base_model = base_cnn(input_shape=self.input_shape, weights=self.weights,
                                    pooling='avg', include_top=False)
-        # self.model = Flatten()(self.base_model.output)
-        # self.model = Dropout(0.5)(self.base_model)
-        # self.model = Dense(512, activation='relu')(self.model)
-        # self.model = Dense(10, activation='softmax')(self.model)
         return self.model
 
     def compile(self):
         """
         Compile the Model
         """
-        self.model.compile(optimizer=Adam(), loss=self.loss)
+        self.model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
+
+    def summary(self):
+        self.model.summary()
 
     def get_preprocess_input(self):
-        return getattr(self.base_module, 'preprocess_input')
+        return self.preprocessing_function
+
+    def train_model_from_dataframe(self, df, img_directory, model, x_col, y_col, monitor='val_accuracy',
+                                   weight_prefix=None, weights_dir=None, class_mode='category',
+                                   batch_size=32, epochs=25, verbose=0):
+        train_result_df = []
+        target_size = (self.input_shape[0], self.input_shape[1])
+        # Take a 5 fold cross validation
+        cv = KFold(n_splits=5, shuffle=True, random_state=1024)
+        fold = 1
+
+        # Loop for each fold
+        for train_index, val_index in cv.split(df[x_col]):
+            train_df, val_df = df.iloc[train_index], df.iloc[val_index]
+            # Define Generators
+            train_datagen = ImageDataGenerator(rescale=1.0 / 255, horizontal_flip=True,
+                                               vertical_flip=True)
+            train_gen = train_datagen.flow_from_dataframe(train_df, directory=img_directory,
+                                                          x_col=x_col, y_col=y_col,
+                                                          batch_size=batch_size, class_mode=class_mode,
+                                                          target_size=target_size,
+                                                          preprocessing_function=self.preprocessing_function)
+
+            valid_gen = train_datagen.flow_from_dataframe(val_df, directory=img_directory,
+                                                          x_col=x_col, y_col=y_col,
+                                                          batch_size=batch_size, class_mode=class_mode,
+                                                          target_size=target_size,
+                                                          preprocessing_function=self.preprocessing_function)
+
+            # compile model
+            model.compile(optimizer=self.optimizer, loss=self.loss, metrics=self.metrics)
+            # Define the callbacks
+            es = EarlyStopping(monitor=monitor, patience=4)
+
+            assert (os.path.isdir(weights_dir), 'Invalid directory ' + weights_dir)
+            # Assign current directory if no directory passed to save weights
+            weights_dir = weights_dir if weights_dir is not None else os.getcwd()
+            weight_prefix = weight_prefix if weight_prefix is not None else self.base_model_name
+            weight_filepath = os.path.join(weights_dir, f'{weight_prefix}_weight_best_fold_{fold}.hdf5')
+            print(f'\tModel Weight file : {weight_filepath}')
+            ckpt = ModelCheckpoint(
+                filepath=weight_filepath,
+                save_weights_only=True,
+                monitor=monitor,
+                mode="max",
+                save_best_only=True,
+            )
+            lr = ReduceLROnPlateau(monitor='val_loss', patience=2, verbose=1)
+            plot_loss = PlotLossesCallback()
+
+            # start training
+            history = model.fit(train_gen, validation_data=valid_gen,
+                                epochs=epochs, callbacks=[es, ckpt, lr, plot_loss],
+                                verbose=verbose)
+            result_df = pd.DataFrame(history.history)
+            result_df['fold'] = fold
+            train_result_df.append(result_df)
+
+            return pd.concat(train_result_df)

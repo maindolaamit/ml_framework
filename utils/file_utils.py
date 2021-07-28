@@ -1,5 +1,7 @@
 import os
 import zipfile
+import tarfile
+
 from glob import glob
 from pathlib import Path
 
@@ -66,3 +68,16 @@ def load_from_json(json_file_path):
         json_data = json.load(json_file)
     return json_data
 
+
+def extract_tar(tarfile_path, destn_dir=None):
+    assert os.path.exists(tarfile_path), 'Tar file does not exists : '+tarfile_path
+    tar = tarfile.open(tarfile_path)
+    assert tar.is_tarfile(tarfile_path), 'Invalid tar file : '+tarfile_path
+    # create the destination directory
+    if not os.path.isdir(destn_dir):
+        os.mkdir(destn_dir)
+        print('created directory : ' + destn_dir)
+    # extract the contents
+    tar.extractall(destn_dir)
+    print('Successfully extracted file to : ' + destn_dir)
+    
