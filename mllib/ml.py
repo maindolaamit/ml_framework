@@ -90,11 +90,6 @@ class RegressionSelectHelper(EstimatorSelectHelper):
         test_score_columns = ['estimator', 'params', 'mean_squared_error', 'mean_absolute_error', 'r2_score',
                               'jacobian_score']
         self.df_test_score = pd.DataFrame(test_scores, columns=test_score_columns).reset_index(drop=True)
-        # df_score = pd.merge(self.df_score, df_test_score, on=['estimator', 'params'])
-
-        # Re arrange columns for readability
-        # score_columns = df_score.columns.tolist()[:2] + test_score_columns[2:] + df_score.columns.tolist()[2:-3]
-        # self.df_score = df_score[score_columns].sort_values(by=sort_by)
         return self.df_test_score
 
 
@@ -110,7 +105,9 @@ class ClassifierSelectHelper(EstimatorSelectHelper):
     def val_score(self, sort_by='mean_val_score'):
         return super().val_score(sort_by)
 
-    def test_score(self, x_test, y_test, sort_by=['precision']):
+    def test_score(self, x_test, y_test, sort_by=None):
+        if sort_by is None:
+            sort_by = ['precision']
         test_scores = []
         for key, model in self.search_grid.items():
             y_pred = model.predict(x_test)
@@ -123,16 +120,10 @@ class ClassifierSelectHelper(EstimatorSelectHelper):
             log_loss = sm.log_loss(y_test, y_pred)
             test_scores.append([key, model.best_params_, accuracy, precision, recall, f1_score, roc_auc, log_loss])
 
-        test_score_columns = ['estimator', 'params', 'accuracy', 'precision', 'recall', 'f1-score', 'roc_auc',
-                              'log_loss']
+        test_score_columns = ['estimator', 'params', 'accuracy', 'precision', 'recall',
+                              'f1-score', 'roc_auc', 'log_loss']
         self.df_test_score = pd.DataFrame(test_scores, columns=test_score_columns)
         self.df_test_score = self.df_test_score.sort_values(by=sort_by, ascending=False).reset_index(drop=True)
-        # df_score = pd.merge(self.df_score, df_test_score, on=['estimator'])
-        # # Re arrange columns for readability
-        # score_columns = ['estimator', 'mean_val_score', 'std_val_score', 'mean_fit_time', 'mean_score_time',
-        #                  'params_x', 'params_y', 'accuracy', 'precision', 'recall', 'f1-score', 'roc_auc', 'log_loss']
-        # self.df_score = df_score[score_columns].sort_values(by=sort_by, ascending=False)
-        # return self.df_score, self.search_grid
         return self.df_test_score
 
 
@@ -165,6 +156,7 @@ def evaluate_classifiers(X_train, y_train, X_test, y_test, is_binary=False, cv=5
     return df_val_score, df_test_score, search_grid
 
 
+# TODO : will be depricated with fine_tune in model_builder
 def fine_tune_classifier(model_name, x_train, y_train, cv=5, verbose=0, randomized=False):
     model, param_grid = None, None
     if model_name == 'xgb':
@@ -234,6 +226,7 @@ def fine_tune_classifier(model_name, x_train, y_train, cv=5, verbose=0, randomiz
     # return grid_search.best_estimator_
 
 
+# TODO : will be depricated with fine_tune in model_builder
 def fine_tune_model(model, param_grid, x_train, y_train, cv=5, verbose=0, randomized=False):
     """
     Fine Tune a given Model by using GridSearchCV/RandomizedSearchCV with the Passed parameter grid

@@ -2,6 +2,7 @@ import re
 import string
 
 import nltk
+import emoji
 
 stopwords = None
 try:
@@ -66,7 +67,6 @@ class Clean:
         :param input_txt: Text to clean
         :return: Clean text
         """
-        import emoji
         return re.sub(r':', '', emoji.demojize(input_txt))
 
     @staticmethod

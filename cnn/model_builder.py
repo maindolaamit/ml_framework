@@ -1,17 +1,16 @@
 import importlib
 import os
-
 from pathlib import Path
 
 import pandas as pd
 from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
+from livelossplot.inputs.keras import PlotLossesCallback
+from sklearn.model_selection import KFold
+from tensorflow.keras.layers import Dropout
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.preprocessing.image import ImageDataGenerator, load_img, array_to_img
-from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.python.keras.layers import Conv2D, MaxPool2D, Flatten
 from tensorflow.python.keras.models import Sequential
-from sklearn.model_selection import KFold
-from livelossplot.inputs.keras import PlotLossesCallback
 
 MODELS_FILE_DIR = Path(__file__).resolve().parent
 MODELS_JSON_FILE_PATH = os.path.join(MODELS_FILE_DIR, 'models.json')
@@ -50,15 +49,17 @@ def get_vgg_block(num_blocks=1, input_shape=(150, 150, 3),
 
 
 class CNNModel:
-    def __init__(self, base_model, weights='imagenet', input_shape=(224, 224, 3),
-                 optimizer=Adam(), loss='categorical_crossentropy', metrics=['accuracy']):
+    def __init__(self, model_name, weights='imagenet', input_shape=(224, 224, 3),
+                 optimizer=Adam(), loss='categorical_crossentropy', metrics=None):
         """
         Constructor method
-        :param base_model_name: Base model name
+        :param model_name: Base model name
         :param weights: Weights of the model, initialized to imagenet
         """
+        if metrics is None:
+            metrics = ['accuracy']
+        self.model_name = model_name
         self.metrics = metrics
-        self.base_model = base_model
         self.weights = weights
         self.input_shape = input_shape
         self.model = None
@@ -76,8 +77,7 @@ class CNNModel:
         with open(MODELS_JSON_FILE_PATH) as model_json_file:
             models = json.load(model_json_file)
         if model_name not in models.keys():
-            raise Exception(
-                f"Invalid model name, should have one of the value {models.keys()}")
+            raise Exception(f"Invalid model name, should have one of the value {models.keys()}")
         self.base_model_name = models[model_name]['model_name']
         model_package = models[model_name]['model_package']
         print(f"{model_package}.{self.base_model_name}")
@@ -90,7 +90,7 @@ class CNNModel:
         # Load pre trained model
         base_cnn = getattr(self.base_module, self.base_model_name)
         self.preprocessing_function = getattr(self.base_module, 'preprocess_input')
-        self.base_model = base_cnn(input_shape=self.input_shape, weights=self.weights,
+        self.model_name = base_cnn(input_shape=self.input_shape, weights=self.weights,
                                    pooling='avg', include_top=False)
         return self.model
 
@@ -109,6 +109,15 @@ class CNNModel:
     def train_model_from_dataframe(self, df, img_directory, model, x_col, y_col, monitor='val_accuracy',
                                    weight_prefix=None, weights_dir=None, class_mode='category',
                                    batch_size=32, epochs=25, verbose=0):
+        # Assign current directory if no directory passed to save weights
+        if weights_dir is None:
+            weights_dir = os.path.join(os.getcwd(), 'weights')
+            # create directory if not exists
+            if not os.path.isdir(weights_dir):
+                os.mkdir(weights_dir)
+        else:
+            assert (os.path.isdir(weights_dir), 'Invalid directory ' + weights_dir)
+
         train_result_df = []
         target_size = (self.input_shape[0], self.input_shape[1])
         # Take a 5 fold cross validation
@@ -138,13 +147,10 @@ class CNNModel:
             # Define the callbacks
             es = EarlyStopping(monitor=monitor, patience=4)
 
-            assert (os.path.isdir(weights_dir), 'Invalid directory ' + weights_dir)
-            # Assign current directory if no directory passed to save weights
-            weights_dir = weights_dir if weights_dir is not None else os.getcwd()
             weight_prefix = weight_prefix if weight_prefix is not None else self.base_model_name
             weight_filepath = os.path.join(weights_dir, f'{weight_prefix}_weight_best_fold_{fold}.hdf5')
             print(f'\tModel Weight file : {weight_filepath}')
-            ckpt = ModelCheckpoint(
+            mckpt = ModelCheckpoint(
                 filepath=weight_filepath,
                 save_weights_only=True,
                 monitor=monitor,
@@ -156,10 +162,11 @@ class CNNModel:
 
             # start training
             history = model.fit(train_gen, validation_data=valid_gen,
-                                epochs=epochs, callbacks=[es, ckpt, lr, plot_loss],
+                                epochs=epochs, callbacks=[es, mckpt, lr, plot_loss],
                                 verbose=verbose)
             result_df = pd.DataFrame(history.history)
             result_df['fold'] = fold
             train_result_df.append(result_df)
 
-            return pd.concat(train_result_df)
+            fold += 1
+        return pd.concat(train_result_df)
